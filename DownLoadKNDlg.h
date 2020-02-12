@@ -9,11 +9,11 @@
 
 typedef struct _PE_DATA_PACK
 {
-	struct _PE_DATA_PACK  *pNext;
 	char sName[64];
-	BYTE* pData;
-	int	DataSize;
-	int	line,unitNum;
+	BYTE uMd5[16];
+	int	offset;
+	int	lenData;
+	BYTE pData[0];
 }PE_DATA_PACK;
 // CDownLoadKNDlg ¶Ô»°¿ò
 class CDownLoadKNDlg : public CDialogEx
@@ -43,12 +43,16 @@ protected:
 	afx_msg HCURSOR OnQueryDragIcon();
 	DECLARE_MESSAGE_MAP()
 public:
-	afx_msg void OnBnClickedButton3();
 	CString sOutPutMsg;
 	CComboBox m_ComList;
 	CEdit sOutPutCtrl;
 	
 	PE_DATA_PACK *pAllPackFile = NULL;
+
+	
+	afx_msg void OnBnClickedButton3();
+	afx_msg void OnBnClickedButton2();
+	afx_msg void OnCbnSelchangeCombo1();
 	void RefreshProgress(WPARAM Pos);
 	LRESULT OnOutPutProgress(WPARAM wParam, LPARAM lParam);
 	LRESULT OnOutPutEditUpdate(WPARAM wParam, LPARAM lParam);
@@ -59,17 +63,6 @@ public:
 	void FindComPort(void);
 
 	unsigned long g_FontAdd = 0;
-	DWORD FONT_GeneratePack(BYTE *si, DWORD silen, BYTE cmd, BYTE *so);
-	int Font_ExecCmd(BYTE cmd, BYTE *s, DWORD len, BYTE tmOutSec);
-	int EXIT_ExecCmd(BYTE tmOutSec);
-	int Font_BuildLink(BYTE tmOutSec);
-	void DownLoadKN();
-	int Down_SendRecvPross(BYTE *s, DWORD len, BYTE *pRecv, DWORD rMixLen, int mTimeOut);
-	int User_BuildLink();
-	int User_EraseChip();
-	int Down_DownDataPack(BYTE* pCodeAddress, BYTE *Data, DWORD DataLen);
-	int User_DownCode();
-
 	static DWORD WINAPI ThreadFunc(LPVOID pParam);
 	BOOL StartDownLoadCode(void);
 	
@@ -79,5 +72,4 @@ public:
 	afx_msg void OnBnClickedButton1();
 	CProgressCtrl ProgressDown;
 	afx_msg void OnNMCustomdrawProgress1(NMHDR *pNMHDR, LRESULT *pResult);
-	afx_msg void OnBnClickedButton2();
 };

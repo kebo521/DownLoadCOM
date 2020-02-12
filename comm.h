@@ -35,7 +35,8 @@ public:
 	void Crc16CCITT(BYTE *pDataIn, DWORD dwLen, BYTE *pOut);	//º∆À„CRC16
 	BOOL IsOpen();
 	DWORD IsRecvEevent();
-	int SupReadCom(BYTE *pData, DWORD dwBytesRead, int timeOutMs);
+	int SupSendPackCom(BYTE *buf, DWORD len );
+	BYTE* SupReadPackCom(BYTE *pData,DWORD* pReadSize, int timeOutMs);
 private:
 	HANDLE hDev; //…Ë±∏æ‰±˙
 	CString strComName;

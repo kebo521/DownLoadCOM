@@ -339,45 +339,150 @@ DWORD CPdkbdoc::IsRecvEevent(void)
 	return 0;
 }
 
-int CPdkbdoc::SupReadCom(BYTE *pData, DWORD dwBytesRead, int timeOutMs)
+//==============buf 前面预留4个字节空间[55 02 Len[2]]===========================
+//====按照【.02 Len[2] Data[Len] crc 03】结构发送,传入Data与Len===================
+int CPdkbdoc::SupSendPackCom(BYTE *buf, DWORD len )
 {
-	DWORD dwReadLen = 0,offset=0;
+	unsigned long length=0,reLen;
+	WORD i;
+	BYTE crc=0;
+	
+	if(hDev== NULL)
+	{
+		//Trace("WriteCom hDev is NULL");
+		return COM_ERROR ;
+	}
+	//----add [02 len[2] ... crc 03]------
+	*(--buf) = len&0xff;
+	*(--buf) = len/256;
+	len += 2;
+	for(i=0;i<len;i++)
+		crc ^= buf[i];
+	buf[i++]=crc;
+	buf[i++]=0x03;
+	*(--buf) = 0x02;
+	*(--buf) = 0x55;
+	len += 4;
+	//HexTrace("WriteCom:", (char *)buf, (int)len);
+	PurgeComm(hDev, PURGE_TXCLEAR | PURGE_RXCLEAR);
+	do{
+		if (WriteFile( hDev,		// handle to file to write to
+			buf+length,              // pointer to data to write to file
+			len-length,              // number of bytes to write
+			&reLen,NULL) == 0)      // pointer to number of bytes written
+		{
+			//Trace("WriteFile err=%d", GetLastError());
+			return COM_ERROR;
+		}
+		length += reLen ;
+	}while(length < len) ;
+
+	return COM_OK ;
+}
+
+BYTE* CPdkbdoc::SupReadPackCom(BYTE *pData, DWORD* pReadSize, int timeOutMs)
+{
+	DWORD i,dwReadLen = 0,offset=0,ReadLen=0,dReadSize;
 	clock_t timeOut;
 
 	if (hDev == NULL)
 	{
-		return -1;
+		return NULL;
 	}
 	if (timeOutMs)
 	{
 		timeOut = clock() + timeOutMs;
 	}
+	dReadSize = *pReadSize;
 
 	for (;;)
 	{
-		//for (int delay = 0; delay < 1000; delay++) SwitchToThread();
-		//---0.25ms
-		//for (int delay = 0; delay < 1667; delay++) SwitchToThread();
-		Sleep(1);
-		if (ReadFile(hDev, pData+ offset, dwBytesRead- offset, &dwReadLen, NULL))
+		if(0==IsRecvEevent())
+		{
+			Sleep(10);
+			continue;
+		}
+		if(ReadFile(hDev, pData+ offset, dReadSize- offset, &dwReadLen, NULL))
 		{
 			if(dwReadLen>0)
 				offset += dwReadLen;
 		}
-		
-		if (dwBytesRead)
-		{
-			if(offset >= dwBytesRead)
-				return offset;
-		}
-
-		if (timeOutMs)
-		{
-			if ((clock() - timeOut) >= 0)
+		if(offset >= 5)
+		{//02 len[2] data[Len] crc 03
+			for(i=0;i<offset;i++)
 			{
-				return offset;
+				if(pData[i] == 0x02) break;
+			}
+			
+			if(i < offset)
+			{
+				if(i)
+				{
+					memmove(pData,pData+i,offset-i);
+					offset -= i;
+					i = 0;
+				}
+				if(offset >= 3)
+				{
+					ReadLen=pData[1]*256 + pData[2];
+					break;
+				}
+			}
+		}
+		if(timeOutMs)
+		{
+			if((clock() - timeOut) >= 0)
+			{
+				return NULL;
 			}	
 		}
 	}
+
+	if(offset >= (ReadLen+5))
+	{
+		BYTE crc=0;
+		offset = ReadLen+1+2;
+		//Len[2]+data[len]+crc
+		for(i=1;i<offset;i++)
+		{
+			crc ^= pData[i];
+		}
+		*pReadSize = ReadLen;
+		if(crc == pData[i])
+			return &pData[3];
+		return NULL;
+	}
+
+	for (;;)
+	{
+		if(0==IsRecvEevent())
+		{
+			Sleep(100);
+			continue;
+		}
+		dwReadLen=0;
+		if (ReadFile(hDev, pData+ offset, dReadSize- offset, &dwReadLen, NULL))
+		{
+			if(dwReadLen>0)
+				offset += dwReadLen;
+			continue;
+		}
+		
+		if(offset >= (ReadLen+5))
+		{
+			BYTE crc=0;
+			offset = ReadLen+1+2;
+			//Len[2]+data[len]+crc
+			for(i=1;i<offset;i++)
+			{
+				crc ^= pData[i];
+			}
+			*pReadSize = ReadLen;
+			if(crc == pData[i])
+				return &pData[3];
+			return NULL;
+		}
+	}
+	return NULL;
 }
 

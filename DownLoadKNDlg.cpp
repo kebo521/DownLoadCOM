@@ -60,13 +60,9 @@ CDownLoadKNDlg::CDownLoadKNDlg(CWnd* pParent /*=NULL*/)
 
 CDownLoadKNDlg::~CDownLoadKNDlg()
 {
-	PE_DATA_PACK *pNext;
-	while (pAllPackFile)
+	if(pAllPackFile)
 	{
-		pNext = pAllPackFile->pNext;
-		free(pAllPackFile->pData);
 		free(pAllPackFile);
-		pAllPackFile = pNext;
 	}
 }
 
@@ -86,6 +82,7 @@ BEGIN_MESSAGE_MAP(CDownLoadKNDlg, CDialogEx)
 	ON_MESSAGE(WM_OUTPUTEDIT1, &CDownLoadKNDlg::OnOutPutEditUpdate)
 	ON_MESSAGE(WM_OUT_PROGRESS, &CDownLoadKNDlg::OnOutPutProgress)
 	ON_BN_CLICKED(IDC_BUTTON3, &CDownLoadKNDlg::OnBnClickedButton3)
+	ON_CBN_SELCHANGE(IDC_COMBO1,&CDownLoadKNDlg::OnCbnSelchangeCombo1)
 	ON_BN_CLICKED(IDC_BUTTON1, &CDownLoadKNDlg::OnBnClickedButton1)
 	ON_NOTIFY(NM_CUSTOMDRAW, IDC_PROGRESS1, &CDownLoadKNDlg::OnNMCustomdrawProgress1)
 	ON_BN_CLICKED(IDC_BUTTON2, &CDownLoadKNDlg::OnBnClickedButton2)
@@ -505,431 +502,8 @@ DWORD EXCMD_GenerateExitPack(BYTE *so)
 }
 
 
-DWORD CDownLoadKNDlg::FONT_GeneratePack(BYTE *si, DWORD silen, BYTE cmd, BYTE *so)
-{// 1b ee len0 len1 cmd data[n] bcc
-	BYTE bcc = 0;
-	BYTE stemp[520] = { 0 };
-	BYTE *pOut;
-	DWORD i, len;
-	pOut = stemp;
-	pOut++;
-	pOut++;
-	*pOut++ = cmd;
-	switch (cmd)
-	{
-	case FONT_CMD_ERASEALL:
-		memcpy(pOut, "KINGSEE@", 8);
-		pOut += 8;
-		break;
-	case FONT_CMD_SETADD:
-		memcpy(pOut, "AD", 2);
-		pOut += 2;
-		break;
-	case FONT_CMD_READ:
-		memcpy(pOut, "RD", 2);
-		pOut += 2;
-		*pOut++ = (BYTE)((g_FontAdd >> 24) & 0x0ff);
-		*pOut++ = (BYTE)((g_FontAdd >> 16) & 0x0ff);
-		*pOut++ = (BYTE)((g_FontAdd >> 8) & 0x0ff);
-		*pOut++ = (BYTE)((g_FontAdd)& 0x0ff);
-		break;
-	case FONT_CMD_WRITE:
-		memcpy(pOut, "WR", 2);
-		pOut += 2;
-		*pOut++ = (BYTE)((g_FontAdd >> 24) & 0x0ff);
-		*pOut++ = (BYTE)((g_FontAdd >> 16) & 0x0ff);
-		*pOut++ = (BYTE)((g_FontAdd >> 8) & 0x0ff);
-		*pOut++ = (BYTE)((g_FontAdd)& 0x0ff);
-		break;
-	default:
-		break;
-	}
-	for (i = 0; i<silen; i++)
-	{
-		*pOut++ = si[i];
-	}
-	len = pOut - stemp;
-	stemp[0] = (BYTE)((len - 2) >> 8);
-	stemp[1] = (BYTE)((len - 2) & 0xff);
-
-	for (i = 0; i<(len); i++)
-	{
-		bcc ^= stemp[i];
-	}
-	*pOut++ = bcc;
-	len++;
-	TRACE("LEN=%02x\r\n", len);
-	return EXCMD_GeneratePack(stemp, len, EXCMD_FONT, so);  //返回长度
-}
-
-
-int CDownLoadKNDlg::Font_ExecCmd(BYTE cmd, BYTE *s, DWORD len, BYTE tmOutSec)
-{
-	int i;
-	DWORD l;
-	BYTE sBuf[512], chRcvbuf[512];
-	l = FONT_GeneratePack(s, len, cmd, sBuf);
-	for (i = 0; i<5; i++)
-	{
-		m_serial.WriteCom(sBuf, l);
-		if (m_serial.SupReadCom(chRcvbuf, 1, tmOutSec))
-		{
-			if (chRcvbuf[0] == EXCMD_ACK)
-			{
-				//ShowMsg("执行命令成功");
-				if (cmd == FONT_CMD_READ)
-				{
-					m_serial.SupReadCom(chRcvbuf, 1000, tmOutSec);
-				}
-				return  0;
-			}
-			else
-			{
-				//m_Port.sReadByLen(1000,tmOutSec);
-				return 1;
-			}
-		}
-	}
-	return 1;
-}
-
-int CDownLoadKNDlg::EXIT_ExecCmd(BYTE tmOutSec)
-{
-	int i;
-	DWORD l;
-	BYTE sBuf[512], chRcvbuf[512];
-	l = EXCMD_GenerateExitPack(sBuf);
-	for (i = 0; i<5; i++)
-	{
-		m_serial.WriteCom(sBuf, l);
-		if (m_serial.SupReadCom(chRcvbuf, 1, tmOutSec))
-		{
-			return  0;
-		}
-		else
-		{
-			//m_Port.sReadByLen(1000,tmOutSec);
-			return 1;
-		}
-	}
-	return 1;
-}
-
-
-
-int CDownLoadKNDlg::Font_BuildLink(BYTE tmOutSec)
-{
-	int i;
-	BYTE chRcvbuf[256];
-	for (i = 0; i<5; i++)
-	{
-		m_serial.WriteCom((BYTE*)"K", 1);
-		if (m_serial.SupReadCom(chRcvbuf, 1, tmOutSec))
-		{
-			if (chRcvbuf[0] == 'S')
-			{
-				//ShowMsg("执行命令成功");
-				m_serial.WriteCom((BYTE*)"A", 1);
-				return  0;
-			}
-		}
-	}
-	return 1;
-}
-
-void CDownLoadKNDlg::DownLoadKN()
-{
-	char sMsg[200] = { 0 };
-	BYTE   sBuf[1024];
-
-	//2-1增加建立连接 BUILDLINK
-	if (Font_BuildLink(2))
-	{
-		OutPutEdit1("建立连接失败");
-		return;
-	}
-	
-	// m_Port.AsynClose();
-	// m_Port.SetupParam(nPort,38400,'N','8','2');
-	//m_Port.AsynOpen();
-	//3 发送数据擦除芯片
-	OutPutEdit1("正在擦除...");
-	if (0 == Font_ExecCmd(FONT_CMD_ERASEALL, sBuf, 0, 10))
-	{
-		OutPutEdit1("擦除成功！");
-		Sleep(100);
-		//3 loop send file
-		OutPutEdit1("开始下载资源");
-	
-	}
-	/*
-	for(i=0;i<1160;i++)   //FILE 大小
-	//for(i=0;i<(iFileLength+127)/128; i++)
-	{
-	FileRead(FileFont, sBuf, 128);
-	//sprintf(szCmd,"%x %x %x %x %x %x %x %x",sBuf[0], sBuf[1],sBuf[2],sBuf[3],
-	//sBuf[4],sBuf[5],sBuf[6],sBuf[7]);
-	//ShowMsg(szCmd);
-	if(Font_ExecCmd(FONT_CMD_WRITE,sBuf,128,1))
-	{
-	ShowMsg("写入失败！");
-	Sleep(5000);
-	break;
-	}
-	g_FontAdd +=128;
-	ProgressDown->Position=i;
-	}
-	ProgressDown->Position=0;
-	}
-	FileClose(FileFont);     //关闭文件
-
-	EXIT_ExecCmd(5);     //发送退出指令
-	//4 下载完成，关闭串口
-	ProgressDown->Position=0;
-	m_Port.AsynClose();
-	ShowMsg("关闭串口");
-	*/
-
-}
-
-
-
-
-int CDownLoadKNDlg::Down_SendRecvPross(BYTE *s, DWORD len,BYTE *pRecv,DWORD rMixLen,int mTimeOut)
-{
-	int ret;
-	BYTE chRcvbuf[512];
-	m_serial.WriteCom(s, len);
-	ret = m_serial.SupReadCom(chRcvbuf, 1 + rMixLen, mTimeOut);
-	if (ret > 0)
-	{
-		if (chRcvbuf[0] == 'y')
-		{
-			ret--;
-			if (pRecv)
-			{
-				memcpy(pRecv, chRcvbuf + 1, ret);
-			}
-			return ret;
-		}
-		else if (chRcvbuf[0] == 0x1f) //chip locked
-		{
-			m_serial.WriteCom((BYTE*)"\x92\x6d", 2);
-			ret = m_serial.SupReadCom(chRcvbuf, 1, 5);
-			if (chRcvbuf[0] == 'y')
-				return 0;
-			return -32;
-		}
-		return -51;
-	}
-	//失败
-	return ret;
-}
-
-
-int CDownLoadKNDlg::Down_DownDataPack(BYTE* pCodeAddress, BYTE *Data, DWORD DataLen)
-{
-	int ret;
-	DWORD i;
-	BYTE  s[512], chRcvbuf[512];
-	//--31 CE  .YES
-	m_serial.WriteCom((BYTE*)"\x31\xce", 2);
-	//--DATA ADD SEND
-	memcpy(s,pCodeAddress, 4);
-	Down_StrAddBccByte(s, 4);
-
-	ret = m_serial.SupReadCom(chRcvbuf, 1,5);
-	if (ret<1 || chRcvbuf[0] != 'y')
-		return (-1100 + ret);
-
-	m_serial.WriteCom(s, 5);//SEND Address 
-
-	s[0] = (BYTE)(DataLen - 1);
-	for (i = 0; i<DataLen; i++)
-		s[i + 1] = Data[i];
-	Down_StrAddBccByte(s, DataLen + 1);
-
-	ret = m_serial.SupReadCom(chRcvbuf, 1, 5);
-	if (ret<1 || chRcvbuf[0] != 'y') //Recv Address flag
-		return (-1200 + ret);
-	//SEND code data and Recv flag
-	if (0>(ret = Down_SendRecvPross(s, DataLen + 2,NULL,0,50)))
-		return (-1300 + ret);
-	return 0;
-}
-
-int  CDownLoadKNDlg::User_BuildLink()
-{
-	int ret;
-	BYTE s[200];
-	//ShowMsg("User_BuildLink::");
-	if (0>(ret= Down_SendRecvPross((BYTE*)"\x7f", 1,NULL,0,5)))
-	{
-		OutPutEdit1("User_BuildLink::send err");
-		return (-2100+ ret);
-	}
-	
-	m_serial.CloseCom();
-	//m_Port.SetupParam(nPort,115200,'E','8','1');
-	m_serial.SetupParam(57600, EVENPARITY, 8, ONESTOPBIT);
-	if (!m_serial.IsOpen())
-	{
-		//sprintf(sMsg,"打开串口[%d]失败,请选择正确的端口",nPort);
-		OutPutEdit1("打开串口失败");
-		return -3100;
-	}
-	//ShowMsg("User_BuildLink::Asynopen 2");
-	//Sleep(100);   //REV STR
-	if (0 > (ret = Down_SendRecvPross((BYTE*)"\x00\xff",2,s,260,50)))
-		return (-1100 + ret);
-	//OutSprintEdit1("SupReadCom[%d],[%d]", ret, s[0]);
-	if (ret < (s[0]+2)) return (-1300 + ret);
-		
-	Sleep(10);   //REV STR
-	if (0 > (ret = Down_SendRecvPross((BYTE*)"\x02\xfd",2, s, 260, 50)))
-		return (-1400 + ret);
-	
-	if (ret < (s[0] + 2)) return (-1500 + ret);
-		
-	//OutSprintEdit1("111SupReadCom[%d]", ret);
-	Sleep(10);   //REV STR
-	if (0 > (ret = Down_SendRecvPross((BYTE*)"\x02\xfd", 2,s,260,50)))
-		return (-1700 + ret);
-	if (ret < (s[0] + 2)) return (-1800 + ret);
-
-	Sleep(10);   //REV STR
-	if (0 > (ret = Down_SendRecvPross((BYTE*)"\x01\xfe", 2, s, 260, 5000)))
-		return (-2000 + ret);
-	//OutSprintEdit1("2SupReadCom[%d],[%d]", ret, s[0]);
-	//Sleep(10);   //REV STR
-	//OutPutEdit1("与终端连接成功");
-	return 0;
-	//return 0;
-}
-
-int CDownLoadKNDlg::User_EraseChip()
-{
-	BYTE s[256];
-	BYTE chRcvbuf[256];
-	int ret;
-	int EraseBlock, m_CodeLen;
-	//Sleep(100);   //REV STR
-
-	if (0>(ret = Down_SendRecvPross((BYTE*)"\x11\xee", 2, NULL, 0, 5)))
-	{
-		OutPutEdit1("User_Erase::send err");
-		return (-1000 + ret);
-	}
-	
-	//Sleep(50);   //REV STR
-	if (0>(ret = Down_SendRecvPross((BYTE*)"\x08\x00\x00\x00\x08", 5,NULL,0,10)))
-		return (-1100 + ret);
-	//Sleep(50);   //REV STR
-	if (0>(ret = Down_SendRecvPross((BYTE*)"\x00\xff", 2, chRcvbuf, 1, 10)))
-		return (-1200 + ret);
-	
-	//Sleep(50);    //REV STR
-	if (0>(ret = Down_SendRecvPross((BYTE*)"\x73\x8c", 2, chRcvbuf, 1, 100)))
-		return (-1300 + ret);
-	Sleep(50);   //REV STR
-	if (0>(ret = Down_SendRecvPross((BYTE*)"\x7f", 1, NULL, 0, 5)))
-		return (-1400 + ret);
-	//Sleep(50);   //REV STR
-	if (0>(ret = Down_SendRecvPross((BYTE*)"\x43\xbc", 2, NULL, 0, 5)))
-		return (-1500 + ret);
-	if (0>(ret = Down_SendRecvPross((BYTE*)"\x00\x11\x11", 3, NULL, 0, 500)))
-		return (-1600 + ret);
-
-	m_CodeLen = pAllPackFile->line * 16;
-	EraseBlock = m_CodeLen / 1024;
-	EraseBlock++;  //代码有多大就要擦除多少K空间
-	int i = 0;
-	int j;
-	int len;
-	for (i = 0; i<EraseBlock; i += 10)
-	{
-		if (i + 10 <= EraseBlock)
-			len = 10;
-		else
-			len = EraseBlock - i;
-
-		if (0>(ret = Down_SendRecvPross((BYTE*)"\x43\xbc", 2, NULL, 0, 5)))
-			return (-1700 + ret);
-
-		s[0] = len - 1;
-		for (j = 0; j<len; j++)
-			s[1 + j] = i + j;
-		Down_StrAddBccByte(s, len + 1);
-
-		if (0>(ret = Down_SendRecvPross(s, len + 2, NULL, 0, 500)))
-			return (-1800 + ret);
-	}
-	//if(false==Down_SendCmdPack("\x09\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x08",12))
-	//	return false;   //09 00 01 02 03 04 05 06 07 08 09 08 
-	//if(false==Down_SendCmdPack("\x43\xbc",2))
-	//	return false;   //43 BC 
-	//if(false==Down_SendCmdPack("\x04\x0A\x0B\x0C\x0D\x0E\x0A",7))
-	//	return false;   //03 0A 0B 0C 0D 03 
-	return 0;
-}
 //const char SN[] = { "\x10\x01\x20\x46\x12\x99\x00\x00\x01" };
-int CDownLoadKNDlg::User_DownCode()
-{
-	BYTE *pCodeData;
-	int	ret,line, unitNum, Percen,uNitPer,SendLen, Offset,MaxCodeLen;
-	BYTE sAddress[8],sSendData[512];
 
-	pCodeData = pAllPackFile->pData;
-	MaxCodeLen = pAllPackFile->DataSize;
-	unitNum= pAllPackFile->unitNum;
-	uNitPer = pAllPackFile->line / 100;
-	line = 0;
-	SendLen = 0;
-	Percen = 0;
-	ProgressDown.SetRange(0, 100);
-	ProgressDown.SetStep(1);
-	RefreshProgress(Percen);
-	for (;;)
-	{
-		Offset = line*unitNum;
-		if (SendLen == 0)
-		{
-			memcpy(sAddress, pCodeData + Offset, 4);
-		}
-		Offset += 4;
-		if (Offset >= MaxCodeLen) break;
-		if ((MaxCodeLen - Offset) <= 16)
-		{
-			memcpy(sSendData + SendLen, pCodeData + Offset, MaxCodeLen- Offset);
-			SendLen += MaxCodeLen - Offset;
-			Offset = 0; //最后一段
-		}
-		else
-		{
-			memcpy(sSendData + SendLen, pCodeData + Offset, 16);
-			SendLen += 16;
-		}
-		line++;
-
-		if (SendLen >= (16*15) || Offset==0)
-		{
-			if (0>(ret = Down_DownDataPack(sAddress, sSendData, SendLen)))
-			{
-				OutSprintEdit1("下载[%s]失败[%d]", sAddress, ret);
-				return -1;
-			}
-			SendLen = 0;
-		}
-		//---更新滚动条------
-		if (Percen != (line / uNitPer))
-		{
-			Percen = line / uNitPer;
-			RefreshProgress(Percen);
-		}
-	}
-	OutPutEdit1("下载成功！");
-	return 0; 
-}
 
 
 void CDownLoadKNDlg::fReadFileMsg(CString m_FilePath)
@@ -938,122 +512,36 @@ void CDownLoadKNDlg::fReadFileMsg(CString m_FilePath)
 	//加载txt文件
 	if (fin.Open(m_FilePath, CFile::modeNoTruncate | CFile::modeRead | CFile::typeBinary))
 	{
-		PE_DATA_PACK *pStart = NULL, *pNext = NULL;
-		char *pFileBuff, *pReadBuff, *pReadEnd;
-		char cBcdBuff[512];
-		DWORD DataLen, ReadLen;
-		int m_CodeLen = 0, offset, line = 0;
+		DWORD ReadLen;
 		//fin.SeekToBegin();
 		ReadLen = fin.SeekToEnd();
 		//OutSprintEdit1("总文件长度%d", ReadLen);
-		pFileBuff = (char*)malloc(ReadLen);
+		pAllPackFile= (PE_DATA_PACK *)malloc(sizeof(PE_DATA_PACK)+ReadLen);
+		if(pAllPackFile == NULL)
+		{
+			MessageBox("读取文件失败[申请空间失败]");
+		}
 		fin.SeekToBegin();
-		ReadLen = fin.Read(pFileBuff, ReadLen);
+		pAllPackFile->lenData=fin.Read(pAllPackFile->pData,ReadLen);
 		fin.Close();
-		//OutSprintEdit1("已读文件长度%d", ReadLen);
-		pReadBuff = pFileBuff;
-		pReadEnd = pReadBuff + ReadLen;
-		for (line = 0; line < 2; line++)
+		if(pAllPackFile->lenData != ReadLen)
 		{
-			DataLen = Conv_CharToNum(pReadBuff[2]) * 16 + Conv_CharToNum(pReadBuff[3]);
-			DataLen *= 2;	//实际为2倍长度
-							//---------------------------------------------------------------------------------
-			if (!memcmp(pReadBuff, "S0", 2))
-			{
-				Conv_StrToBcd_Left(pReadBuff + 4, DataLen, (BYTE*)cBcdBuff);
-				cBcdBuff[DataLen / 2] = '\0';
-				if (line == 0)
-				{
-					OutPutEdit1(cBcdBuff);
-					if (0 != memcmp(cBcdBuff, "KSHD@K35FV", 10))
-					{
-						break;
-					}
-				}
-				else if (!memcmp(cBcdBuff, "KSCD", 4))
-				{
-					BYTE buff[8] = { 0 };
-					Conv_StrToBcd_Left(&(cBcdBuff[4 + 8]), 8, buff);
-					m_CodeLen = buff[0] * 0x1000000 + buff[1] * 0x10000 + buff[2] * 0x100 + buff[3];
-					//OutSprintEdit1("代码长度%d字节", m_CodeLen);
-				}
-			}
-			pReadBuff += 4 + DataLen;
-			while (*pReadBuff == '\r' || *pReadBuff == '\n') pReadBuff++;
+			MessageBox("读取文件失败[长度错]");
+			free(pAllPackFile);
+			pAllPackFile=NULL;
 		}
-
-		while (pReadBuff < pReadEnd)
-		{
-			DataLen = Conv_CharToNum(pReadBuff[2]) * 16 + Conv_CharToNum(pReadBuff[3]);
-			Conv_StrToBcd_Left(pReadBuff + 4, DataLen * 2, (BYTE*)cBcdBuff);
-			if (!memcmp(pReadBuff, "S0", 2))
-			{
-				int i = 0;
-				cBcdBuff[DataLen] = '\0';
-				while (cBcdBuff[i] < 0x20) i++;
-				if (pStart == NULL)
-				{
-					pStart = (PE_DATA_PACK*)malloc(sizeof(PE_DATA_PACK));
-					pNext = pStart;
-				}
-				else
-				{
-					pNext->pNext = (PE_DATA_PACK*)malloc(sizeof(PE_DATA_PACK));
-					pNext = pNext->pNext;
-				}
-				strcpy_s(pNext->sName, sizeof(pNext->sName), cBcdBuff + i);
-				pNext->pNext = NULL;
-				pNext->pData = (BYTE*)malloc(ReadLen);
-				pNext->line = 0;
-				offset = 0;
-			}
-			else if (!memcmp(pReadBuff, "S3", 2))
-			{
-				if (pNext == NULL)
-				{
-					OutSprintEdit1("获取S3文件失败");
-					break;
-				}
-				if (offset == 0)
-				{
-					pNext->unitNum = DataLen;
-				}
-				memcpy(pNext->pData + offset, cBcdBuff, DataLen);
-				offset += DataLen;
-				pNext->line++;
-			}
-			else if (!memcmp(pReadBuff, "S7", 2))
-			{
-				pNext->pData = (BYTE*)realloc(pNext->pData, offset);
-				pNext->DataSize = offset;
-				OutSprintEdit1("获取[%s ]长度[%d]行数[%d]", pNext->sName, offset, pNext->line);
-			}
-			pReadBuff += 4 + DataLen * 2;
-			while (*pReadBuff == '\r' || *pReadBuff == '\n') pReadBuff++;
-		}
-		free(pFileBuff);
-		if (pAllPackFile)
-		{
-			PE_DATA_PACK *pNext;
-			while (pAllPackFile)
-			{
-				pNext = pAllPackFile->pNext;
-				free(pAllPackFile->pData);
-				free(pAllPackFile);
-				pAllPackFile = pNext;
-			}
-		}
-		pAllPackFile = pStart;
-
+		strcpy_s(pAllPackFile->sName,m_FilePath.GetBuffer(0));
+		pAllPackFile->offset = 0;
+		//-----计算文件Md5值-----------
+	//	md5(pAllPackFile->pData,pAllPackFile->lenData,pAllPackFile->uMd5);
 	}
-
 }
 
 void CDownLoadKNDlg::OnBnClickedButton3()
 {
 	char pBuf[MAX_PATH];
 	GetCurrentDirectory(MAX_PATH, pBuf);
-	CFileDialog dlg(true, ".K35", NULL, OFN_HIDEREADONLY | OFN_OVERWRITEPROMPT, "K35文件(*.K35)|*.K35");
+	CFileDialog dlg(true, ".ksp", NULL, OFN_HIDEREADONLY | OFN_OVERWRITEPROMPT, "ksp文件(*.ksp)|*.ksp");
 	dlg.m_ofn.lpstrTitle = "请选择程序文件";
 
 	if (dlg.DoModal() == IDOK)
@@ -1065,6 +553,12 @@ void CDownLoadKNDlg::OnBnClickedButton3()
 		fReadFileMsg(m_FilePath);
 	}
 }
+
+void CDownLoadKNDlg::OnCbnSelchangeCombo1()
+{
+	FindComPort();
+}
+
 
 
 int CDownLoadKNDlg::OpenComm()
@@ -1113,11 +607,91 @@ int CDownLoadKNDlg::CloseComm()
 	return 0;
 }
 
+typedef struct
+{
+	char		sTuSN[32];
+	char		sModel[8];
+	char		sType[2];
+	char		sComType[6];
+	char		sParVer[12];
+}tData_TMS_Const;
+
+int TMS_CheckFullData(BYTE *pIndata,int InLen)
+{
+	int Len=0;
+	//TRACE_HEX("TMS_CheckFullData",pIndata,InLen);
+	if(InLen > 2)
+	{
+		Len = *pIndata++;
+		Len *= 256;
+		Len |= *pIndata++;
+		Len += 2;
+		//if(Len > 4096) return -1;
+		if(InLen >= Len) return Len;
+	}
+	return 0;
+}
+
+
+
+BYTE* TMS_AddSendData(BYTE *pSendData,int hID,char *format,...)
+{
+	int ret;
+	va_list arg;
+	*pSendData++ = hID/256;
+	*pSendData++ = hID&0xff;
+	va_start( arg, format);
+	ret=vsnprintf((char*)pSendData+2,256,format,arg);
+	va_end( arg );
+	*pSendData++ = ret/256;
+	*pSendData++ = ret&0xff;
+	pSendData += ret;
+	return pSendData;
+}
+
+BYTE* TMS_AddSendBuff(BYTE *pSendData, int hID,BYTE *pInBuf, int inLen)
+{
+	*pSendData++ = hID / 256;
+	*pSendData++ = hID & 0xff;
+	*pSendData++ = inLen / 256;
+	*pSendData++ = inLen & 0xff;
+	memcpy(pSendData, pInBuf, inLen);
+	pSendData += inLen;
+	return pSendData;
+}
+
+BYTE* TMS_FindRecvData(BYTE *pRecvData,DWORD DataLen,WORD uInID,DWORD *pOutLen)
+{
+	DWORD Len,Tag;
+	int cont = 0;
+	BYTE *pEnd = pRecvData+DataLen;
+	while(pRecvData < pEnd)
+	{	
+		Tag = *pRecvData++;
+		Tag *= 256;
+		Tag |= *pRecvData++;
+		
+		Len =* pRecvData++;
+		Len *= 256;
+		Len |= *pRecvData++;
+
+		if(Tag == uInID)
+		{
+			*pOutLen = Len;
+			return pRecvData;
+		}
+		pRecvData += Len;
+	}
+	return NULL;
+}
+
 // 线程函数，循环监听串口握手包
 DWORD WINAPI CDownLoadKNDlg::ThreadFunc(LPVOID pParam)
 {
 	CDownLoadKNDlg *dlg = (CDownLoadKNDlg *)pParam;
+	DWORD ReadLen,DataLen;
 	int ret;
+	BYTE sBuffSend[4096+64],sBuffRecv[512],*pRecvData,*p;
 
 	if (NULL == dlg) {
 		//Trace("工作线程获取主对话框指针失败.");
@@ -1125,34 +699,60 @@ DWORD WINAPI CDownLoadKNDlg::ThreadFunc(LPVOID pParam)
 		return -1;
 	}
 	dlg->GetDlgItem(IDC_BUTTON1)->EnableWindow(FALSE);
-	do {
-		//m_Port.SetupParam(nPort,115200,'N','8','1');
-		if (ret = dlg->m_serial.SetupParam(57600, NOPARITY, 8, ONESTOPBIT))
+	if (0 == (ret=dlg->m_serial.SetupParam(115200, NOPARITY, 8, ONESTOPBIT)))
+	{
+		while(1)
 		{
-			dlg->OutSprintEdit1("打开串口失败[%d]", ret);
-			break;
+			//m_Port.SetupParam(nPort,115200,'N','8','1');
+			dlg->OutSprintEdit1("等待终端请求...");
+			ReadLen = sizeof(sBuffRecv);
+			pRecvData = dlg->m_serial.SupReadPackCom(sBuffRecv,&ReadLen,30*1000);
+			if(pRecvData == NULL)
+				return (-1100 + 1);
+			pRecvData[ReadLen]='\0';
+			p = (BYTE*)strstr((char*)pRecvData,"->hello");
+			if(p)
+			{
+				dlg->OutSprintEdit1("收到请求[%s]",pRecvData);
+				*p='\0';
+				ret=sprintf_s((char*)sBuffSend+4,sizeof(sBuffSend)-4,"Down->%s",pRecvData);
+				if(dlg->m_serial.SupSendPackCom(sBuffSend+4,ret))
+					return -1201;
+			}
+			pRecvData = dlg->m_serial.SupReadPackCom(sBuffRecv,&ReadLen,30*1000);
+			if(pRecvData == NULL)
+				return (-1100 + 2);
+
+			p=TMS_FindRecvData(pRecvData,ReadLen,0x3103,&DataLen);	//pFixed->sTuSN
+			p=TMS_FindRecvData(pRecvData,ReadLen,0x3140,&DataLen);	//pFixed->sType
+			p=TMS_FindRecvData(pRecvData,ReadLen,0x3141,&DataLen);	//pFixed->sModel
+			p=TMS_FindRecvData(pRecvData,ReadLen,0x3126,&DataLen);	//"{\"net\":\"%s\",\"app_v\":\"%s\",\"source_v\":\"%s\",\"life\":\"%d\",\"bat\":\"%d\"}"
+
+
+			
+			{
+				time_t tt = time(NULL); 
+				tm t; localtime_s(&t, &tt); 
+				//"date": '2018-05-01 10:00:00'
+				printf("%d-%02d-%02d %02d:%02d:%02d", t.tm_year + 1900, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec);
+			}
+		
+			dlg->m_serial.WriteCom(sBuffSend, 4096);//SEND Address 
+
+			
+			dlg->OutSprintEdit1("开始擦除芯片...");
+			
+			dlg->OutSprintEdit1("开始下载程序...");
+			
+			dlg->OutSprintEdit1("下载程序完成");
+			//SNautoInc();  //序列号自动增加
 		}
-		dlg->OutSprintEdit1("开始连接终端...");
-		if (ret = dlg->User_BuildLink())
-		{
-			dlg->OutSprintEdit1("连接终端[%d]", ret);
-			break;
-		}
-		dlg->OutSprintEdit1("开始擦除芯片...");
-		if (ret = dlg->User_EraseChip())
-		{
-			dlg->OutSprintEdit1("擦除芯片失败[%d]", ret);
-			break;
-		}
-		dlg->OutSprintEdit1("开始下载程序...");
-		if (ret = dlg->User_DownCode())
-		{
-			dlg->OutSprintEdit1("下载程序失败[%d]", ret);
-			break;
-		}
-		dlg->OutSprintEdit1("下载程序完成");
-		//SNautoInc();  //序列号自动增加
-	} while (0);
+	}
+	else
+	{
+		dlg->OutSprintEdit1("打开串口失败[%d]", ret);
+	}
+	
 	dlg->m_serial.CloseCom();
 
 	dlg->GetDlgItem(IDC_BUTTON1)->EnableWindow(TRUE);
@@ -1189,36 +789,10 @@ void CDownLoadKNDlg::OnBnClickedButton1()
 	m_serial.SetComm(strComName);
 	OutSprintEdit1("打开串口[%s]...", strComName);
 
-	StartDownLoadCode();
-	/*
-	OutSprintEdit1("开始连接终端...");
-	if (ret = User_BuildLink())
+	if(FALSE == StartDownLoadCode())
 	{
-		OutSprintEdit1("连接终端[%d]", ret);
 		m_serial.CloseCom();
-		return;
 	}
-	OutSprintEdit1("开始擦除芯片...");
-	if (ret = User_EraseChip())
-	{
-		OutSprintEdit1("擦除芯片失败[%d]", ret);
-		m_serial.CloseCom();
-		return;
-	}
-	OutSprintEdit1("开始下载程序...");
-	if (ret = User_DownCode())
-	{
-		OutSprintEdit1("下载程序失败[%d]", ret);
-		m_serial.CloseCom();
-		return;
-	}
-	OutSprintEdit1("下载程序完成");
-	//SNautoInc();  //序列号自动增加
-	
-
-
-	m_serial.CloseCom();
-	*/
 }
 
 
