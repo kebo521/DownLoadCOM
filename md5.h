@@ -27,6 +27,10 @@
 #ifndef POLARSSL_MD5_H
 #define POLARSSL_MD5_H
 
+typedef unsigned char   		u8;		//!< Define u8
+typedef unsigned short  		u16;	//!< Define u16
+typedef unsigned int			u32;	//!< Define u32
+
 // Regular implementation
 //
 
@@ -73,6 +77,8 @@ void md5_finish( md5_context *ctx, unsigned char output[16] );
 
 /* Internal use */
 void md5_process( md5_context *ctx, const unsigned char data[64] );
+
+void md5( const unsigned char *input, size_t ilen, unsigned char output[16] );
 
 #ifdef __cplusplus
 }

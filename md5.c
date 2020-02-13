@@ -27,9 +27,9 @@
  *
  *  http://www.ietf.org/rfc/rfc1321.txt
  */
-
-
-
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>	
 #include "md5.h"
 
 /*
